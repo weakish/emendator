@@ -10,7 +10,7 @@ from diff_match_patch import diff_match_patch
 
 dmp = diff_match_patch()
 
-Ignored_marks = '''[,.;:!'"?-]'''
+Ignored_marks = re.compile('[ ,\.;:!\'"?-]+$')
 Del_begin = '[-'
 Del_end = '-]'
 Ins_begin = '{+'
@@ -28,6 +28,22 @@ def dmpdiff(from_text, to_text):
   text_diffs = dmp.diff_main(from_text, to_text)
   dmp.diff_cleanupSemantic(text_diffs)
   return text_diffs
+
+def unmark_minor_diffs(diffs):
+  '''unmark minor diffs
+
+  >>> diffs = [(1, 'please '), (0, 'give m'), (-1, 'e'), (1, 'om'), (0, ' a cup of bean'), (-1, '-'), (1, ' '), (0, 'milk'), (-1, '.'), (1, '!'), (0, ' Thank'), (-1, 's'), (1, ' you'), (0, '.')]
+  >>> unmark_minor_diffs(diffs)
+  [(1, 'please '), (0, 'give m'), (-1, 'e'), (1, 'om'), (0, ' a cup of bean'), (0, '-'), (0, 'milk'), (0, '.'), (0, ' Thank'), (-1, 's'), (1, ' you'), (0, '.')]
+  '''
+  cooked_diffs = []
+  for (op, data) in diffs: 
+    if not Ignored_marks.match(data):
+        cooked_diffs.append((op, data))
+    else:
+      if op in (0, -1):
+        cooked_diffs.append((0, data))
+  return cooked_diffs
 
 def dmpdiff_text(diffs): 
   '''return diff in plain text.
@@ -55,13 +71,13 @@ def main():
 
   >>> text1 = 'give me a cup of bean-milk. Thanks.'
   >>> text2 = 'please give mom a cup of bean milk! Thank you.'
-  >>> dmpdiff_text(dmpdiff(text1, text2))
-  '{+please +}give m[-e-]{+om+} a cup of bean[---]{+ +}milk[-.-]{+!+} Thank[-s-]{+ you+}.'
+  >>> dmpdiff_text(unmark_minor_diffs(dmpdiff(text1, text2)))
+  '{+please +}give m[-e-]{+om+} a cup of bean-milk. Thank[-s-]{+ you+}.'
   '''
   import sys
   from_text = open(sys.argv[1]).read()
   to_text = open(sys.argv[2]).read()
-  print(dmpdiff_text(dmpdiff(from_text, to_text)))
+  print(dmpdiff_text(unmark_minor_diffs(dmpdiff(from_text, to_text))))
 
 if __name__ == '__main__':
   main()
