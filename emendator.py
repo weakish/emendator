@@ -1,72 +1,67 @@
-#!/usr/bin/env python3.2
+#!/usr/bin/env python3.1
 # by Jakukyo Friel <weakish@gmail.com> under GPL-2
+
+'''compare two files, ignore unimportant characters.
+
+'''
 
 import re
 from diff_match_patch import diff_match_patch
 
 dmp = diff_match_patch()
 
-Ignored_marks = r'''[][`~!@#(){}/?+\|'",.;:-]''' 
-Del_begin = '<del style="background:#ffe6e6;">'
-Del_end = '</del>'
-Ins_begin = '<ins style="background:#e6ffe6;">'
-Ins_end = '</ins>'
+Ignored_marks = '''[,.;:!'"?-]'''
+Del_begin = '[-'
+Del_end = '-]'
+Ins_begin = '{+'
+Ins_end = '+}'
 
 
-def dmpdiff(from_text, to_text): 
-  '''return pretty html of diff.
+def dmpdiff(from_text, to_text):
+  '''return diff in a list of tuples
 
   >>> text1 = 'give me a cup of bean-milk. Thanks.'
-  >>> text2 = 'please give mom a cup of bean milk!  Thank you.'
+  >>> text2 = 'please give mom a cup of bean milk! Thank you.'
   >>> dmpdiff(text1, text2)
-  '<ins style="background:#e6ffe6;">please </ins><span>give m</span><del style="background:#ffe6e6;">e</del><ins style="background:#e6ffe6;">om</ins><span> a cup of bean</span><del style="background:#ffe6e6;">-</del><ins style="background:#e6ffe6;"> </ins><span>milk</span><del style="background:#ffe6e6;">.</del><ins style="background:#e6ffe6;">! </ins><span> Thank</span><del style="background:#ffe6e6;">s</del><ins style="background:#e6ffe6;"> you</ins><span>.</span>'
-  
+  [(1, 'please '), (0, 'give m'), (-1, 'e'), (1, 'om'), (0, ' a cup of bean'), (-1, '-'), (1, ' '), (0, 'milk'), (-1, '.'), (1, '!'), (0, ' Thank'), (-1, 's'), (1, ' you'), (0, '.')]
   '''
   text_diffs = dmp.diff_main(from_text, to_text)
   dmp.diff_cleanupSemantic(text_diffs)
-  diff_html = dmp.diff_prettyHtml(text_diffs)
-  return diff_html
+  return text_diffs
 
-def split_text(text, ignored_marks):
-  '''split text, put ignored_marks on separated lines
-  
-  >>> text = 'give me a cup of bean-milk. Thanks.'
+def dmpdiff_text(diffs): 
+  '''return diff in plain text.
 
-  >>> split_text(text, Ignored_marks)
-  'give me a cup of bean\n-\nmilk\n.\n Thanks\n.\n'
-  '''.replace('+IGNORE_RESULT', '+ELLIPSIS\n<...>')
-  # A pitfall of doctest. See http://bugs.python.org/issue7381
-  # and http://stackoverflow.com/questions/3862274/doctests-how-to-suppress-ignore-output
-  cooked_text = re.sub(ignored_marks, '\n\g<0>\n', text)
-  return cooked_text
+  Use marks similar to wdiff.
 
-def ediff(from_text, to_text, ignored_marks):
-  '''return pretty html of diff, ignore unimportant characters
+  >>> diffs = [(1, 'please '), (0, 'give m'), (-1, 'e'), (1, 'om'), (0, ' a cup of bean'), (-1, '-'), (1, ' '), (0, 'milk'), (-1, '.'), (1, '!'), (0, ' Thank'), (-1, 's'), (1, ' you'), (0, '.')]
+  >>> dmpdiff_text(diffs)
+  '{+please +}give m[-e-]{+om+} a cup of bean[---]{+ +}milk[-.-]{+!+} Thank[-s-]{+ you+}.'
+  '''
+  text = []
+  for (op, data) in diffs:
+    if op == 1: # insert
+      text.append(Ins_begin + data + Ins_end)
+    elif op == -1: # delete
+      text.append(Del_begin + data + Del_end)
+    elif op == 0: # equal
+      text.append(data)
+  return ''.join(text)
+
+
+
+def main():
+  ''' main function
 
   >>> text1 = 'give me a cup of bean-milk. Thanks.'
-  >>> text2 = 'please give mom a cup of bean milk!  Thank you.'
-  >>> ediff(text1, text2, Ignored_marks)
-  '<ins style="background:#e6ffe6;">please </ins><span>give m</span><del style="background:#ffe6e6;">e</del><ins style="background:#e6ffe6;">om</ins><span> a cup of bean</span><del style="background:#ffe6e6;">&para;<br>-&para;<br></del><ins style="background:#e6ffe6;"> </ins><span>milk&para;<br></span><del style="background:#ffe6e6;">.&para;<br></del><ins style="background:#e6ffe6;">!&para;<br> </ins><span> Thank</span><del style="background:#ffe6e6;">s</del><ins style="background:#e6ffe6;"> you</ins><span>&para;<br>.&para;<br></span>'
+  >>> text2 = 'please give mom a cup of bean milk! Thank you.'
+  >>> dmpdiff_text(dmpdiff(text1, text2))
+  '{+please +}give m[-e-]{+om+} a cup of bean[---]{+ +}milk[-.-]{+!+} Thank[-s-]{+ you+}.'
   '''
-  cooked_from_text = split_text(from_text, ignored_marks)
-  cooked_to_text = split_text(to_text, ignored_marks)
-  diff_html = dmpdiff(cooked_from_text, cooked_to_text)
-  diff_html = unmark_unimportant(diff_html, ignored_marks)
-  return diff_html
-
-def unmark_unimportant(diff_html, ignored_marks):
-  '''remove unimportant marks
-  
-  >>> to_unmark_text = '<ins style="background:#e6ffe6;">please </ins><span>give m</span><del style="background:#ffe6e6;">e</del><ins style="background:#e6ffe6;">om</ins><span> a cup of bean</span><del style="background:#ffe6e6;">?<br>-?<br></del><ins style="background:#e6ffe6;"> </ins><span>milk?<br></span><del style="background:#ffe6e6;">. </del><ins style="background:#e6ffe6;">!</ins><span>?<br>Thank</span><del style="background:#ffe6e6;">s</del><ins style="background:#e6ffe6;"> you</ins><span>?<br>.</span>'
-  >>> unmark_unimportant(to_unmark_text, Ignored_marks)
-  '<ins style="background:#e6ffe6;">please </ins><span>give m</span><del style="background:#ffe6e6;">e</del><ins style="background:#e6ffe6;">om</ins><span> a cup of bean</span><del style="background:#ffe6e6;">?<br>-?<br></del><ins style="background:#e6ffe6;"> </ins><span>milk?<br></span><del style="background:#ffe6e6;">. </del><ins style="background:#e6ffe6;">!</ins><span>?<br>Thank</span><del style="background:#ffe6e6;">s</del><ins style="background:#e6ffe6;"> you</ins><span>?<br>.</span>'
-  '''
-  minor_insert = Ins_begin + Ignored_marks + Ins_end + '$'
-  minor_delete = '^' + Del_begin + '(' + Ignored_marks + ')' + Del_end 
-  diff_html = re.sub(minor_insert, '', diff_html)
-  diff_html = re.sub(minor_delete, '\g<1>', diff_html)
-  return diff_html
+  import sys
+  from_text = open(sys.argv[1]).read()
+  to_text = open(sys.argv[2]).read()
+  print(dmpdiff_text(dmpdiff(from_text, to_text)))
 
 if __name__ == '__main__':
-  import sys
-  print(ediff(open(sys.argv[2]).read(), open(sys.argv[2]).read()))
+  main()
