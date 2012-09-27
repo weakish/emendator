@@ -3,6 +3,10 @@
 
 '''compare two files, ignore unimportant characters.
 
+Usage:
+
+    emendator.py file1 file2
+
 '''
 
 import re
@@ -31,7 +35,7 @@ def dmpdiff(from_text, to_text):
   [(1, 'please '), (0, 'give m'), (-1, 'e'), (1, 'om'), (0, ' a cup of bean'), (-1, '-'), (1, ' '), (0, 'milk'), (-1, '.'), (1, '!'), (0, ' Thank'), (-1, 's'), (1, ' you'), (0, '.')]
   '''
   text_diffs = dmp.diff_main(from_text, to_text)
-  dmp.diff_cleanupSemantic(text_diffs)
+  dmp.diff_cleanupSemanticLossless(text_diffs)
   return iter(text_diffs)
 
 def unmark_minor_diffs(diffs):
