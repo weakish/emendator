@@ -18,8 +18,8 @@ diff_match_patch.Diff_Timeout = 0
 
 dmp = diff_match_patch()
 
-
-const.ignored_regex = re.compile('[ ,\.;:!\'"?-]+$')
+# Ignore common punctuation marks in Chinese and English.
+const.ignored_regex = re.compile('[·～！……（）「」『』‘’“”《》，。、；：？—— ,\.;:!\'"?-]+$')
 const.del_begin = '[-'
 const.del_end = '-]'
 const.ins_begin = '{+'
@@ -144,6 +144,23 @@ def main():
   >>> text2 = 'please give mom a cup of bean milk! Thank you.'
   >>> dmpdiff_text(unmark_minor_diffs(dmpdiff(text1, text2)))
   '{+please +}give m[-e-]{+om+} a cup of bean-milk. Thank[-s-]{+ you+}.'
+
+  Chinese tests
+  >>> text3 = '西周武公之共太子死，有五庶子，毋適立也。'
+  >>> text4 = '周共太子死，有五庶子，皆愛之而無適立。'
+  >>> dmpdiff_text(unmark_minor_diffs(dmpdiff(text3, text4)))
+  '[-西-]周[-武公之-]共太子死，有五庶子，[-毋-]{+皆愛之而無+}適立[-也-]。'
+
+  Well, the diff made by a human being (aka. me) is: 
+
+      '[-西-]周[-武公之-]共太子死，有五庶子，{+皆愛之而+}[-毋-]{+無+}適立[-也-]。'
+
+  The Levenshtein distance is the same.
+  The difference is due to the Chinese characters '無' and '毋' are similar in both pronunciation and meaning.
+  So the result is not perfect but expected,
+  since computers can not produce a perfect result *unless* it actually understand the **semantics** of the language.
+  If the diff was made by a human being who does not understand Chinese, the result would be the same.
+  
   '''
   import sys
   from_text = open(sys.argv[1]).read()
