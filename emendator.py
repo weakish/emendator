@@ -10,6 +10,7 @@ Usage:
 '''
 
 import re
+from itertools import chain
 from diff_match_patch import diff_match_patch
 import const
 
@@ -19,7 +20,10 @@ diff_match_patch.Diff_Timeout = 0
 dmp = diff_match_patch()
 
 # Ignore common punctuation marks in Chinese and English.
-const.ignored_regex = re.compile('[·～！……（）「」『』‘’“”《》，。、；：？—— ,\.;:!\'"?-]+$')
+const.ignored_marks = '·～！……（）「」『』‘’“”《》，。、；：？—— ,\.;:!\'"?~-'
+const.ignored = '[' + const.ignored_marks + ']' + '+'
+const.ignored_begin_regex = re.compile('^' + const.ignored)
+const.ignored_end_regex = re.compile(const.ignored + '$')
 const.del_begin = '[-'
 const.del_end = '-]'
 const.ins_begin = '{+'
@@ -43,12 +47,112 @@ def unmark_minor_diffs(diffs):
 
   >>> diffs = [(1, 'please '), (0, 'give m'), (-1, 'e'), (1, 'om'), (0, ' a cup of bean'), (-1, '-'), (1, ' '), (0, 'milk'), (-1, '.'), (1, '!'), (0, ' Thank'), (-1, 's'), (1, ' you'), (0, '.')]
   >>> list(unmark_minor_diffs(diffs))
-  [(1, 'please '), (0, 'give m'), (-1, 'e'), (1, 'om'), (0, ' a cup of bean'), (0, '-'), (0, 'milk'), (0, '.'), (0, ' Thank'), (-1, 's'), (1, ' you'), (0, '.')]
+  [(1, 'please'), (0, 'give m'), (-1, 'e'), (1, 'om'), (0, ' a cup of bean'), (0, '-'), (0, 'milk'), (0, '.'), (0, ' Thank'), (-1, 's'), (1, 'you'), (0, '.')]
+  '''
+  return swap_insert(
+    flatten_diffs(
+      map(
+        cleanup_minor_delete,
+        map(
+          unmark_minor_delete,
+          map(
+            cleanup_minor_insert,
+            filter(
+              is_not_minor_insert,
+              diffs))))))
+
+def flatten_diffs(diffs):
   '''
 
-  diffs_without_minor_inserts = filter(is_not_minor_insert, diffs)
-  diffs_we_care = map(unmark_minor_delete, diffs_without_minor_inserts)
-  return diffs_we_care
+  >>> flatten_diffs(((1, 's'), ((0, 't'), (1, 'w')), (-1, 'z')))
+  ((1, 's'), (0, 't'), (1, 'w'), (-1, 'z'))
+  >>> flatten_diffs(((1, 's'), (-1, 'z')))
+  ((1, 's'), (-1, 'z'))
+  
+  I'm not going to reinvent itertools.chain.
+  itertools.chain produces '(1, 's', (0, 't'), (1, 'w'), -1, 'z')'.
+  '''
+  return tuple(
+    chain.from_iterable(
+      ( t
+        if isinstance(t[0], tuple)
+        else (t,))
+      for t in diffs))
+
+def cleanup_minor_insert(diff_tuple):
+  '''
+
+  >>> cleanup_minor_insert((1, '~user~'))
+  (1, 'user')
+  >>> cleanup_minor_insert((1, 'i~j'))
+  (1, 'i~j')
+  '''
+  op, data = diff_tuple
+  return (
+    ( op,
+      re.sub(
+        const.ignored_begin_regex, '',
+        (re.sub(const.ignored_end_regex, '', data))))
+    if is_insert(diff_tuple)
+    else diff_tuple)
+
+def cleanup_minor_delete(diff_tuple):
+  '''
+
+  >>> cleanup_minor_delete((-1, '~we~'))
+  ((0, '~'), (-1, 'we'), (0, '~'))
+  >>> cleanup_minor_delete((-1, '~we'))
+  ((0, '~'), (-1, 'we'))
+  >>> cleanup_minor_delete((-1, 'we~'))
+  ((-1, 'we'), (0, '~'))
+  >>> cleanup_minor_delete((-1, 'we'))
+  (-1, 'we')
+  '''
+  op, data = diff_tuple
+  data_regex = re.compile(
+    '(^[' +
+    const.ignored_marks +
+    ']*)([^' +
+    const.ignored_marks +
+    ']+)([' +
+    const.ignored_marks +
+    ']*$)')
+  prefix = 0, re.sub(data_regex, '\g<1>', data)
+  body = -1, re.sub(data_regex, '\g<2>', data)
+  suffix = 0, re.sub(data_regex, '\g<3>', data)
+  return (
+    ( (prefix, body, suffix)
+      if (all((prefix[1], suffix[1])))
+      else (
+        body
+        if (not any((prefix[1], suffix[1])))
+        else (
+          (prefix, body)
+          if (prefix[1])
+          else (body, suffix))))
+    if is_delete(diff_tuple)
+    else diff_tuple) 
+
+def swap_insert(diffs):
+  '''
+
+  >>> tuple(swap_insert(((-1, 'foo'), (0, '~'), (1, 'us'), (0, 'me'))))
+  ((-1, 'foo'), (1, 'us'), (0, '~'), (0, 'me'))
+  '''
+  return (
+    ( diffs[t+1]
+      if
+        t != (len(diffs) - 1)
+        and all(
+          (diffs[t][0] == 0, is_not_important(diffs[t]), diffs[t+1][0] == 1))
+      else (
+        diffs[t-1]
+        if 
+          t != 0
+          and all(
+            (diffs[t][0] == 1, diffs[t-1][0] == 0, is_not_important(diffs[t-1])))
+        else (diffs[t])))
+    for t in range(len(diffs)))
 
 def unmark_minor_delete(diff_tuple):
   '''
@@ -63,7 +167,10 @@ def unmark_minor_delete(diff_tuple):
   (1, 'foo')
   '''
   op, data = diff_tuple
-  return (0, data) if all((is_delete(diff_tuple), is_not_important(diff_tuple))) else diff_tuple
+  return (
+    (0, data)
+    if all((is_delete(diff_tuple), is_not_important(diff_tuple)))
+    else diff_tuple)
 
 def is_not_minor_insert(diff_tuple):
   '''decide if the diff tuple is important
@@ -77,7 +184,10 @@ def is_not_minor_insert(diff_tuple):
   >>> is_not_minor_insert((1, '.'))
   False
   '''
-  return False if all((is_insert(diff_tuple), is_not_important(diff_tuple))) else True 
+  return (
+    False
+    if all((is_insert(diff_tuple), is_not_important(diff_tuple)))
+    else True)
 
 def is_not_important(diff_tuple):
   '''decide if the diff tuple contains only ignored characters
@@ -87,7 +197,7 @@ def is_not_important(diff_tuple):
   >>> is_not_important((0, '.'))
   True
   '''
-  return True if const.ignored_regex.match(diff_tuple[1]) else False
+  return True if const.ignored_end_regex.match(diff_tuple[1]) else False
 
 def is_insert(diff_tuple):
   '''
@@ -133,8 +243,13 @@ def format_diff(diff_tuple):
   '[-e-]'
   '''
   data = diff_tuple[1]
-  return (const.ins_begin + data + const.ins_end) if (is_insert(diff_tuple)) else (
-    (const.del_begin + data + const.del_end) if (is_delete(diff_tuple)) else data)
+  return (
+    const.ins_begin + data + const.ins_end
+    if is_insert(diff_tuple)
+    else (
+      const.del_begin + data + const.del_end
+      if is_delete(diff_tuple)
+      else data))
 
 
 def main():
@@ -143,8 +258,8 @@ def main():
   >>> text1 = 'give me a cup of bean-milk. Thanks.'
   >>> text2 = 'please give mom a cup of bean milk! Thank you.'
   >>> dmpdiff_text(unmark_minor_diffs(dmpdiff(text1, text2)))
-  '{+please +}give m[-e-]{+om+} a cup of bean-milk. Thank[-s-]{+ you+}.'
-
+  '{+please+}give m[-e-]{+om+} a cup of bean-milk. Thank[-s-]{+you+}.'
+  
   Chinese tests
   >>> text3 = '西周武公之共太子死，有五庶子，毋適立也。'
   >>> text4 = '周共太子死，有五庶子，皆愛之而無適立。'
@@ -153,14 +268,22 @@ def main():
 
   Well, the diff made by a human being (aka. me) is: 
 
-      '[-西-]周[-武公之-]共太子死，有五庶子，{+皆愛之而+}[-毋-]{+無+}適立[-也-]。'
+      [-西-]周[-武公之-]共太子死，有五庶子，
+      {+皆愛之而+}[-毋-]{+無+}適立[-也-]。
 
   The Levenshtein distance is the same.
-  The difference is due to the Chinese characters '無' and '毋' are similar in both pronunciation and meaning.
+  The difference is due to the Chinese characters '無' and '毋' are
+  similar in both pronunciation and meaning.
   So the result is not perfect but expected,
-  since computers can not produce a perfect result *unless* it actually understand the **semantics** of the language.
-  If the diff was made by a human being who does not understand Chinese, the result would be the same.
-  
+  since computers can not produce a perfect result *unless*
+  it actually understand the **semantics** of the language.
+  If the diff was made by a human being who does not understand Chinese,
+  the result would be the same.
+ 
+  >>> text5 = """I say:'we'."""
+  >>> text6 = """I say:"us"."""
+  >>> dmpdiff_text(unmark_minor_diffs(dmpdiff(text5, text6)))
+  "I say:'[-we-]{+us+}'."
   '''
   import sys
   from_text = open(sys.argv[1]).read()
