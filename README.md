@@ -2,10 +2,24 @@
 
 [dmp]: https://code.google.com/p/google-diff-match-patch/
 
-It also offers some additional functions, like ignore certain characters (punctuation marks, etc).
+It ignores punctuation marks in English and Chinese.
+
+Usage:
+
+    emendator.py file1 file2
+
+`ememdator` is compatible with `colordiff`:
+
+    emendator.py file1 file2 | colordiff
 
 It depends on [this const.py module][const], because python does not support constant variables or symbols.
 (But I want to use them.)
-Old version `3d939afe` does not use `const.py`, and may have better performance (since I wrote it in a different style), so you may prefer this version.
 
 [const]: https://gitcafe.com/weakish/whci/blob/master/const.py
+
+Bugs
+
+Diff on certain text will fail.
+However, if we divide that text into two parts, then diff on each part separately, diff succeeds.
+
+
