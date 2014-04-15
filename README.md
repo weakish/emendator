@@ -1,3 +1,6 @@
+**This project is discontinued.**
+
+
 `emendator` is a commend line tool based on the [google-diff-match-patch][dmp] library.
 
 [dmp]: https://code.google.com/p/google-diff-match-patch/
